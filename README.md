@@ -13,17 +13,24 @@ Projeto TypeScript implementando Clean Architecture com casos de uso para as ent
 npm install
 ```
 
-## Notification Pattern — Entidade Product
+## Validação Desacoplada — Entidade Product
 
-A entidade `Product` foi refatorada para utilizar o **Notification Pattern**: ao invés de lançar um `Error` imediatamente na primeira regra violada, todos os erros de validação são acumulados em um objeto `Notification` e lançados juntos como `NotificationError` ao final.
+A entidade `Product` utiliza o **Notification Pattern** combinado com o **Validator Pattern**: as regras de validação são delegadas a uma classe especializada (`ProductYupValidator`), criada via `ProductValidatorFactory`. A entidade não contém mais lógica de validação direta (sem if/else soltos).
+
+**Fluxo de validação:**
+
+```
+Product.validate()
+  └─ ProductValidatorFactory.create()   → ProductYupValidator
+       └─ Yup.validateSync(abortEarly: false)
+            └─ entity.notification.addError(...)  ← acumula todos os erros
+  └─ notification.hasErrors() → throw NotificationError
+```
 
 **Exemplo de comportamento:**
 
 ```typescript
-// Antes: só o primeiro erro era reportado
-new Product("123", "", -1); // throw Error("Name is required")
-
-// Depois: todos os erros são acumulados e lançados de uma vez
+// Todos os erros são acumulados e lançados de uma vez
 new Product("123", "", -1);
 // throw NotificationError([
 //   { context: "product", message: "Name is required" },
@@ -35,12 +42,13 @@ new Product("123", "", -1);
 
 | Arquivo | Descrição |
 |---|---|
-| `src/domain/product/entity/product.ts` | Entidade refatorada — estende `Entity`, usa `notification` |
-| `src/domain/product/validator/product.validator.ts` | Valida e adiciona erros ao `notification` |
+| `src/domain/product/entity/product.ts` | Entidade — delega validação ao factory |
+| `src/domain/product/factory/product.validator.factory.ts` | Factory que instancia o validador concreto |
+| `src/domain/product/validator/product.yup.validator.ts` | `ProductYupValidator` — valida com Yup |
 | `src/domain/@shared/notification/notification.ts` | Container acumulador de erros |
 | `src/domain/@shared/notification/notification.error.ts` | Erro lançado com todos os erros acumulados |
 
-### Rodando os testes do Notification Pattern
+### Rodando os testes do Validator Pattern
 
 ```bash
 ./node_modules/.bin/jest src/domain/product/entity/product.spec.ts
